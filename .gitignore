@@ -23,4 +23,5 @@ yarn.lock
 
 
 stories/*
+data/*
 .env

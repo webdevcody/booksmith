@@ -1,6 +1,6 @@
 import { Editor } from "@tiptap/react";
 import { useState } from "react";
-import { rewriteText } from "../routes";
+import { rewriteText } from "~/routes/stories.$storySlug";
 
 type FloatingToolbarProps = {
   editor: Editor;

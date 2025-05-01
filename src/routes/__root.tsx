@@ -4,6 +4,7 @@ import {
   Outlet,
   Scripts,
   createRootRouteWithContext,
+  useRouter,
 } from "@tanstack/react-router";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
@@ -28,7 +29,7 @@ export const Route = createRootRouteWithContext<{
       },
       ...seo({
         title: "Story Keeper",
-        description: `TanStack Start is a type-safe, client-first, full-stack React framework. `,
+        description: `A simple and elegant way to keep track of your stories.`,
       }),
     ],
     links: [
@@ -79,9 +80,28 @@ export const Route = createRootRouteWithContext<{
 });
 
 function RootComponent() {
+  const router = useRouter();
+  const isHome = router.state.location.pathname === "/home";
+
   return (
     <RootDocument>
-      <Outlet />
+      <nav className="bg-white shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16">
+            <div className="flex">
+              <div className="flex-shrink-0 flex items-center">
+                <Link to="/" className="text-xl font-bold text-gray-800">
+                  Story Keeper
+                </Link>
+              </div>
+            </div>
+            <div className="flex items-center"></div>
+          </div>
+        </div>
+      </nav>
+      <main className="min-h-screen bg-gray-50">
+        <Outlet />
+      </main>
     </RootDocument>
   );
 }
@@ -93,7 +113,6 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeadContent />
       </head>
       <body>
-        <hr />
         {children}
         <TanStackRouterDevtools position="bottom-right" />
         <ReactQueryDevtools buttonPosition="bottom-left" />

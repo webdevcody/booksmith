@@ -2,161 +2,133 @@ import { createFileRoute } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import fs from "fs/promises";
 import path from "path";
-import { z } from "vinxi";
-import { useEditor, EditorContent } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import { Toolbar } from "../components/Toolbar";
-import { FloatingToolbar } from "../components/FloatingToolbar";
-import { FloatingBadges } from "../components/FloatingBadges";
-import { Toaster, toast } from "sonner";
-import OpenAI from "openai";
+import { StoryCard } from "../components/StoryCard";
 import { useCallback, useEffect, useState } from "react";
-import { debounce } from "lodash";
+import { useNavigate } from "@tanstack/react-router";
+import { z } from "zod";
 
-const STORY_DIRECTORY = "./stories";
-const STORY_KEY = "story.txt";
+const STORY_DIRECTORY = process.env.STORY_DIRECTORY!;
 
-export const loadStory = createServerFn().handler(async () => {
+export const loadStories = createServerFn().handler(async () => {
   try {
-    const story = await fs.readFile(
-      path.join(STORY_DIRECTORY, STORY_KEY),
-      "utf-8"
+    // Convert relative path to absolute path
+    const absolutePath = path.resolve(process.cwd(), STORY_DIRECTORY);
+    console.log("Loading stories from:", absolutePath);
+
+    const files = await fs.readdir(absolutePath);
+    console.log("Found files:", files);
+
+    const storyFiles = files.filter((file) => file.endsWith(".txt"));
+    console.log("Story files:", storyFiles);
+
+    const stories = await Promise.all(
+      storyFiles.map(async (file) => {
+        const filePath = path.join(absolutePath, file);
+        const stats = await fs.stat(filePath);
+        return {
+          title: file.replace(".txt", ""),
+          lastModified: stats.mtime,
+          path: file,
+        };
+      })
     );
-    return story;
+
+    console.log("Loaded stories:", stories);
+    return stories.sort(
+      (a, b) => b.lastModified.getTime() - a.lastModified.getTime()
+    );
   } catch (error) {
-    return "";
+    console.error("Error loading stories:", error);
+    return [];
   }
 });
 
-export const saveStory = createServerFn({
+export const createNewStory = createServerFn({
   method: "POST",
 })
   .validator(
     z.object({
-      text: z.string(),
+      title: z.string(),
     })
   )
   .handler(async (ctx) => {
-    const text = ctx.data.text;
-    await fs.mkdir(STORY_DIRECTORY, { recursive: true });
-    await fs.writeFile(path.join(STORY_DIRECTORY, STORY_KEY), text);
-  });
+    const { title } = ctx.data;
+    const filename = `${title}.txt`;
+    const absolutePath = path.resolve(process.cwd(), STORY_DIRECTORY);
+    console.log("Creating new story in:", absolutePath);
 
-export const rewriteText = createServerFn()
-  .validator(
-    z.object({
-      text: z.string(),
-      prompt: z.string(),
-    })
-  )
-  .handler(async (ctx) => {
-    const { text, prompt } = ctx.data;
-
-    const openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    });
-
-    const completion = await openai.chat.completions.create({
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are a helpful writing assistant. Rewrite the given text according to the user's prompt. Only return the rewritten text, nothing else.",
-        },
-        {
-          role: "user",
-          content: `Please rewrite this text: "${text}" according to this prompt: "${prompt}"`,
-        },
-      ],
-      model: "gpt-3.5-turbo",
-    });
-
-    return completion.choices[0].message.content || text;
+    await fs.mkdir(absolutePath, { recursive: true });
+    await fs.writeFile(
+      path.join(absolutePath, filename),
+      "<p>Start writing your story here...</p>"
+    );
+    return filename;
   });
 
 export const Route = createFileRoute("/")({
-  component: Home,
+  component: HomePage,
+  loader: async () => {
+    const stories = await loadStories();
+    return { stories };
+  },
 });
 
-function Home() {
-  const [isSaving, setIsSaving] = useState(false);
-  const [isToolbarVisible, setIsToolbarVisible] = useState(false);
-  const [toolbarPosition, setToolbarPosition] = useState({ top: 0, left: 0 });
+interface Story {
+  title: string;
+  lastModified: Date;
+  path: string;
+}
 
-  const debouncedSave = useCallback(
-    debounce(async (html: string) => {
-      setIsSaving(true);
-      try {
-        await saveStory({ data: { text: html } });
-      } catch (error) {
-        console.error("Failed to save story:", error);
-        toast.error("Failed to save story");
-      } finally {
-        setIsSaving(false);
-      }
-    }, 3000),
-    []
-  );
+function HomePage() {
+  const { stories } = Route.useLoaderData();
+  const [newStoryTitle, setNewStoryTitle] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
+  const navigate = useNavigate();
 
-  const editor = useEditor({
-    extensions: [StarterKit],
-    editorProps: {
-      attributes: {
-        class:
-          "text-xl prose prose-lg max-w-none focus:outline-none min-h-[500px] p-8 font-sans text-gray-800 leading-relaxed tracking-wide",
-      },
-    },
-    onUpdate: ({ editor }) => {
-      const html = editor.getHTML();
-      setIsSaving(true);
-      debouncedSave(html);
-    },
-    onSelectionUpdate: ({ editor }) => {
-      const { from, to } = editor.state.selection;
-      if (from === to) {
-        setIsToolbarVisible(false);
-        return;
-      }
-
-      const view = editor.view;
-      const { top, left } = view.coordsAtPos(from);
-      setToolbarPosition({ top: top - 40, left });
-      setIsToolbarVisible(true);
-    },
-  });
-
-  useEffect(() => {
-    loadStory().then((content) => {
-      console.log("content", content);
-      if (editor && content) {
-        editor.commands.setContent(content);
-      }
-    });
-  }, [editor]);
-
-  useEffect(() => {
-    return () => {
-      debouncedSave.cancel();
-    };
-  }, [debouncedSave]);
+  const handleCreateStory = async () => {
+    if (!newStoryTitle.trim()) return;
+    setIsCreating(true);
+    try {
+      const filename = await createNewStory({ data: { title: newStoryTitle } });
+      navigate({ to: "/stories/$storySlug", params: { storySlug: filename } });
+    } catch (error) {
+      console.error("Failed to create story:", error);
+    } finally {
+      setIsCreating(false);
+    }
+  };
 
   return (
-    <div className="p-4 max-w-4xl mx-auto">
-      <Toaster richColors />
-      <h1 className="text-3xl font-bold mb-6 text-gray-800">Story Keeper</h1>
-      <div className="border border-gray-200 rounded-lg overflow-hidden bg-white shadow-lg">
-        <Toolbar editor={editor} />
-        <EditorContent editor={editor} />
-        {editor && (
-          <FloatingToolbar
-            editor={editor}
-            isVisible={isToolbarVisible}
-            top={toolbarPosition.top}
-            left={toolbarPosition.left}
+    <div className="p-8 max-w-7xl mx-auto">
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-4xl font-bold text-gray-800">Your Stories</h1>
+        <div className="flex gap-4">
+          <input
+            type="text"
+            value={newStoryTitle}
+            onChange={(e) => setNewStoryTitle(e.target.value)}
+            placeholder="New story title"
+            className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
-        )}
+          <button
+            onClick={handleCreateStory}
+            disabled={isCreating || !newStoryTitle.trim()}
+            className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isCreating ? "Creating..." : "New Story"}
+          </button>
+        </div>
       </div>
-      {editor && <FloatingBadges editor={editor} isSaving={isSaving} />}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {stories.map((story) => (
+          <StoryCard
+            key={story.path}
+            title={story.title}
+            lastModified={story.lastModified}
+            path={story.path}
+          />
+        ))}
+      </div>
     </div>
   );
 }

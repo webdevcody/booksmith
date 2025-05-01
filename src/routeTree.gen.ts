@@ -12,12 +12,19 @@
 
 import { Route as rootRoute } from './routes/__root'
 import { Route as IndexImport } from './routes/index'
+import { Route as StoriesStorySlugImport } from './routes/stories.$storySlug'
 
 // Create/Update Routes
 
 const IndexRoute = IndexImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRoute,
+} as any)
+
+const StoriesStorySlugRoute = StoriesStorySlugImport.update({
+  id: '/stories/$storySlug',
+  path: '/stories/$storySlug',
   getParentRoute: () => rootRoute,
 } as any)
 
@@ -32,6 +39,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexImport
       parentRoute: typeof rootRoute
     }
+    '/stories/$storySlug': {
+      id: '/stories/$storySlug'
+      path: '/stories/$storySlug'
+      fullPath: '/stories/$storySlug'
+      preLoaderRoute: typeof StoriesStorySlugImport
+      parentRoute: typeof rootRoute
+    }
   }
 }
 
@@ -39,32 +53,37 @@ declare module '@tanstack/react-router' {
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/stories/$storySlug': typeof StoriesStorySlugRoute
 }
 
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/stories/$storySlug': typeof StoriesStorySlugRoute
 }
 
 export interface FileRoutesById {
   __root__: typeof rootRoute
   '/': typeof IndexRoute
+  '/stories/$storySlug': typeof StoriesStorySlugRoute
 }
 
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/stories/$storySlug'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/stories/$storySlug'
+  id: '__root__' | '/' | '/stories/$storySlug'
   fileRoutesById: FileRoutesById
 }
 
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  StoriesStorySlugRoute: typeof StoriesStorySlugRoute
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  StoriesStorySlugRoute: StoriesStorySlugRoute,
 }
 
 export const routeTree = rootRoute
@@ -77,11 +96,15 @@ export const routeTree = rootRoute
     "__root__": {
       "filePath": "__root.tsx",
       "children": [
-        "/"
+        "/",
+        "/stories/$storySlug"
       ]
     },
     "/": {
       "filePath": "index.tsx"
+    },
+    "/stories/$storySlug": {
+      "filePath": "stories.$storySlug.tsx"
     }
   }
 }
